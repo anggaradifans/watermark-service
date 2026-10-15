@@ -6,6 +6,7 @@ const watermarkText = document.getElementById('watermark-text');
 
 const resultSection = document.getElementById('result-section');
 const previewImage = document.getElementById('preview-image');
+const previewPdf = document.getElementById('preview-pdf');
 const downloadLink = document.getElementById('download-link');
 const resetBtn = document.getElementById('reset-btn');
 
@@ -38,9 +39,13 @@ fileInput.addEventListener('change', (e) => {
   }
 });
 
+function isPdf(file) {
+  return file.type === 'application/pdf';
+}
+
 function handleFileSelect(file) {
-  if (!file.type.startsWith('image/')) {
-    alert('Please upload an image file.');
+  if (!file.type.startsWith('image/') && !isPdf(file)) {
+    alert('Please upload an image or PDF file.');
     return;
   }
   
@@ -71,27 +76,35 @@ processBtn.addEventListener('click', async () => {
     });
 
     if (!response.ok) {
-      throw new Error('Processing failed');
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Processing failed');
     }
 
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     
     // Show Result
-    previewImage.src = url;
+    const pdf = isPdf(selectedFile);
+    previewImage.classList.toggle('hidden', pdf);
+    previewPdf.classList.toggle('hidden', !pdf);
+    if (pdf) {
+      previewPdf.src = url;
+    } else {
+      previewImage.src = url;
+    }
     downloadLink.href = url;
     
-    // Set a nice default name for download (though server sets this too, valid for direct link click)
-    // We can just rely on the browser handling the blob download or hint the name
-    // downloadLink.download is set in HTML, let's update it dynamically if we want
-    // But blob URLs don't always carry the filename cleanly unless clicked.
+    // Blob URLs don't carry the server's filename, so copy it from the response header
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    downloadLink.download = match ? match[1] : '';
     
     resultSection.classList.remove('hidden');
     resultSection.scrollIntoView({ behavior: 'smooth' });
 
   } catch (error) {
     console.error(error);
-    alert('Something went wrong. Please try again.');
+    alert(`Something went wrong: ${error.message}`);
   } finally {
     processBtn.classList.remove('loading');
     processBtn.disabled = false;
